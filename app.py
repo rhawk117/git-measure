@@ -2,27 +2,24 @@
 
 import shlex
 from pathlib import Path
-from git_utils import GitUtils, GitResults, AuthorResults
-from display import display_author_stats, display_top_contributors
+from git import GitUtils, GitData
+from display import display_author_stats, display_top_contributors, display_repo_info
 from display import Prompts
 from colorama import Fore
 from typing import Optional
 
-
 class App:
-    """
-    Interactive application for Git Contribution Counter.
-    """
-
     def __init__(self):
         self.repo_path: Optional[Path] = None
-        self.git_results = GitResults()
+        self.git_data: Optional[GitData] = None
 
     def start(self):
         Prompts.info_prompt(
-            "Welcome to Git Contribution Counter Interactive Shell!")
+            "<< Welcome to GitTracker >>"
+        )
         Prompts.color_print(
-            "Type 'help' to see available commands.\n", Fore.CYAN)
+            "Type 'help' to see available commands.\n", Fore.CYAN
+        )
         while True:
             try:
                 user_input = input(f"{Fore.BLUE}>>> {Fore.RESET}").strip()
@@ -47,9 +44,10 @@ class App:
                         self.handle_author(args)
                     case 'top':
                         self.handle_top(args)
+                    case 'info':
+                        self.handle_info()
                     case _:
-                        Prompts.error_prompt(f"Unknown command: {
-                                             command}. Type 'help' to see available commands.")
+                        Prompts.error_prompt(f"Unknown command: {command}. Type 'help' to see available commands.")
             except KeyboardInterrupt:
                 print()
                 Prompts.info_prompt("Exiting interactive shell. Goodbye!")
@@ -74,6 +72,9 @@ class App:
         -by d    Rank by Deletions
         -by net  Rank by Net Contribution (default)
 
+- {Prompts.color_text(Fore.YELLOW, 'info')}
+    Display repository information.
+
 - {Prompts.color_text(Fore.YELLOW, 'help')}
     Show this help message.
 
@@ -93,13 +94,11 @@ class App:
             return
         GitUtils.validate_git(path)
         self.repo_path = path
-        self.git_results = GitResults()
-        git_output = GitUtils.fetch_git_data(path)
-        GitUtils.resolve_git_output(git_output, self.git_results)
+        self.git_data = GitData(path)
         Prompts.success_prompt(f"Git repository set to: {path}")
 
     def handle_author(self, args):
-        if not self.repo_path:
+        if not self.repo_path or not self.git_data:
             Prompts.error_prompt(
                 "Repository path not set. Use 'setpath <path>' first.")
             return
@@ -107,27 +106,24 @@ class App:
             Prompts.error_prompt("'author' command requires an author name.")
             return
         author = args[0]
-        author_result = self.git_results.get_contribution(author)
+        author_result = self.git_data.git_results.get_contribution(author)
         if not author_result:
-            # Verify using GitUtils
             try:
                 GitUtils.check_author_exists(self.repo_path, author)
-                # Refresh git_results to include this author
-                self.git_results = GitResults()
-                git_output = GitUtils.fetch_git_data(
-                    self.repo_path, author=author)
-                GitUtils.resolve_git_output(git_output, self.git_results)
-                author_result = self.git_results.get_contribution(author)
+                self.git_data = GitData(self.repo_path)
+                author_result = self.git_data.git_results.get_contribution(
+                    author)
             except SystemExit:
                 return
         display_author_stats(author_result)
 
     def handle_top(self, args):
-        if not self.repo_path:
+        if not self.repo_path or not self.git_data:
             Prompts.error_prompt(
-                "Repository path not set. Use 'setpath <path>' first.")
+                "Repository path not set. Use 'setpath <path>' first."
+            )
             return
-        by = 'net'  # default
+        by = 'net'
         if args:
             if len(args) >= 2 and args[0] == '-by':
                 if args[1] in ['i', 'd', 'net']:
@@ -140,5 +136,13 @@ class App:
                 Prompts.error_prompt(
                     "Invalid arguments for 'top' command. Use 'top -by i|d|net'.")
                 return
-        top_contributors = self.git_results.get_top_contributors(by=by)
+        top_contributors = self.git_data.git_results.get_top_contributors(
+            by=by)
         display_top_contributors(top_contributors, by)
+
+    def handle_info(self):
+        if not self.repo_path or not self.git_data:
+            Prompts.error_prompt(
+                "Repository path not set. Use 'setpath <path>' first.")
+            return
+        display_repo_info(self.git_data)

@@ -2,15 +2,15 @@
 
 import argparse
 from pathlib import Path
-from git_utils import GitUtils, GitResults
-from display import display_author_stats, display_top_contributors
+from git import GitUtils, GitResults, GitData
+from display import display_author_stats, display_top_contributors, display_repo_info
 from display import Prompts
 from colorama import Fore
 from app import App
 import sys
 
 
-def parse_arguments():
+def set_app_args():
     parser = argparse.ArgumentParser(
         description='Analyze Git repository contributions by authors.'
     )
@@ -35,6 +35,12 @@ def parse_arguments():
         help='Display top 10 contributors'
     )
 
+    group.add_argument(
+        '-i', '--info',
+        action='store_true',
+        help='Display repository information'
+    )
+
     parser.add_argument(
         '-by', '--by',
         type=str,
@@ -46,40 +52,44 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def run_command_line_mode(args):
+def run_as_cli(args):
     if not args.path:
         Prompts.error_prompt(
-            "Error: The -p/--path argument is required in command-line mode."
-        )
+            "Error: The -p/--path argument is required in command-line mode.")
         sys.exit(1)
 
     repo_path = Path(args.path).resolve()
     author = args.author
     top = args.top_contributors
+    info = args.info
     by = args.by  # 'i', 'd', or 'net'
+
     GitUtils.validate_git(repo_path)
 
-    if top:
-        git_result = GitResults()
-        git_output = GitUtils.fetch_git_data(repo_path)
-        GitUtils.resolve_git_output(git_output, git_result)
+    if info:
+        git_data = GitData(repo_path)
+        display_repo_info(git_data)
+    elif top:
+        git_data = GitData(repo_path)
         Prompts.info_prompt(f"Top Contributors Ranked by {by.upper()}:")
-        display_top_contributors(git_result.get_top_contributors(by=by), by)
+        display_top_contributors(
+            git_data.git_results.get_top_contributors(by=by), by)
     elif author:
         GitUtils.check_author_exists(repo_path, author)
-        git_result = GitResults()
-        git_output = GitUtils.fetch_git_data(repo_path, author=author)
-        GitUtils.resolve_git_output(git_output, git_result)
 
-        Prompts.color_print("", Fore.RESET)
-        display_author_stats(git_result.get_contribution(author))
-        Prompts.color_print("", Fore.RESET)
+        git_data = GitData(repo_path)
+        display_author_stats(git_data.git_results.get_contribution(author))
+    else:
+        Prompts.error_prompt(
+            "No action specified. Use -a/--author, -top, or -i/--info."
+        )
+        sys.exit(1)
 
 
-def main():
+def main() -> None:
     if len(sys.argv) > 1:
-        args = parse_arguments()
-        run_command_line_mode(args)
+        args = set_app_args()
+        run_as_cli(args)
     else:
         app = App()
         app.start()
