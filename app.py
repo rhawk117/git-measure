@@ -1,5 +1,3 @@
-# app.py
-
 import shlex
 from pathlib import Path
 from git import GitUtils, GitData
